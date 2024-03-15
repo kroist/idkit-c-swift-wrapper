@@ -8,10 +8,11 @@ group.enter()
 
 print("We're in Swift about to call our async Rust function.")
 Task {
-    let ipAddress = await get_url(
+    let session = WrappedSession.init(
         "app_14d0217a5ec381effeb27d036b7c6c63",
         "rust-test"
     )
+    let ipAddress = session.get_url()
     print("Now we're in Swift again. IP address: \(ipAddress.toString())")
 
     group.leave()

@@ -1,52 +1,80 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, task::Poll};
 
-use idkit::{session::{AppId, BridgeUrl, VerificationLevel}, Session};
+use ffi::{PollResult, WrappedProof};
+use idkit::{session::{AppId, BridgeUrl, Status, VerificationLevel}, Session};
 
 #[swift_bridge::bridge]
 mod ffi {
+
     #[swift_bridge(swift_repr = "struct")]
-    struct MyIpAddress {
-        origin: String,
+    struct WrappedProof {
+        proof: String,
+        merkle_root: String,
+        nullifier_hash: String,
+        credential_type: String,
+    }
+
+    enum PollResult {
+        WaitingForConnection,
+        AwaitingConfirmation,
+        Confirmed(WrappedProof),
+        Failed(String)
     }
 
     extern "Rust" {
-        async fn get_my_ip_from_rust() -> MyIpAddress;
-        async fn get_url(app_id: String, action: String) -> String;
+        type WrappedSession;
+
+        #[swift_bridge(init)]
+        fn new(app_id: String, action: String) -> WrappedSession;
+
+        fn get_url(&self) -> String;
+
+        fn poll(&self) -> PollResult;
     }
 }
 
-async fn get_url(
-    app_id: String,
-    action: String
-) -> String {
-    let session = Session::new(
-        AppId::from_str(&app_id).unwrap(),
-        &action,
-        VerificationLevel::Device,
-        BridgeUrl::default(),
-        (),
-        None
-    ).await.unwrap();
-
-    let url = session.connect_url().to_string();
-    url
+pub struct WrappedSession {
+    session: Session
 }
 
-// TODO: Return a `Result<MyIpAddress, SomeErrorType>`
-//  Once we support returning Result from an async function.
-async fn get_my_ip_from_rust() -> ffi::MyIpAddress {
-    println!("Starting HTTP request from the Rust side...");
-
-    let origin = reqwest::get("https://httpbin.org/ip")
-        .await
-        .unwrap()
-        .json::<HashMap<String, String>>()
-        .await
-        .unwrap()
-        .remove("origin")
-        .unwrap();
-
-    println!("HTTP request complete. Returning the value to Swift...");
-
-    ffi::MyIpAddress { origin }
+impl WrappedSession {
+    fn new(app_id: String, action: String) -> Self {
+        let handle = tokio::runtime::Runtime::new().unwrap();
+        let session = handle.block_on(async {
+            Session::new(
+                AppId::from_str(&app_id).unwrap(),
+                &action,
+                VerificationLevel::Device,
+                BridgeUrl::default(),
+                (),
+                None
+            ).await.unwrap()
+        });
+        WrappedSession {
+            session
+        }
+    }
+    fn get_url(&self) -> String {
+        let url = self.session.connect_url().to_string();
+        url
+    }
+    fn poll(&self) -> PollResult {
+        let handle = tokio::runtime::Runtime::new().unwrap();
+        let status = handle.block_on(async {
+            match self.session.poll_for_status().await.unwrap() {
+                Status::WaitingForConnection => PollResult::WaitingForConnection,
+                Status::AwaitingConfirmation => PollResult::AwaitingConfirmation,
+                Status::Failed(error) => PollResult::Failed(error.to_string()),
+                Status::Confirmed(proof) => PollResult::Confirmed(
+                    WrappedProof {
+                        proof: proof.proof,
+                        merkle_root: proof.merkle_root,
+                        nullifier_hash: proof.nullifier_hash,
+                        credential_type: format!("{}", proof.credential_type),
+                    }
+                ),
+            }
+        });
+        status
+    }
 }

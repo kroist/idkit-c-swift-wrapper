@@ -16,3 +16,5 @@ swift-bridge-build = {path = "../../crates/swift-bridge-build"}
 reqwest = {version = "0.11", features = ["json"]}
 swift-bridge = {path = "../../", features = ["async"]}
 idkit = { git = "https://github.com/kroist/idkit-rs.git" }
+futures = "0.3.30"
+tokio = { version = "1.35.1", features = ["macros", "rt", "rt-multi-thread"] }
