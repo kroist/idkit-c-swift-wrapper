@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
+
+use idkit::{session::{AppId, BridgeUrl, VerificationLevel}, Session};
 
 #[swift_bridge::bridge]
 mod ffi {
@@ -9,7 +11,25 @@ mod ffi {
 
     extern "Rust" {
         async fn get_my_ip_from_rust() -> MyIpAddress;
+        async fn get_url(app_id: String, action: String) -> String;
     }
+}
+
+async fn get_url(
+    app_id: String,
+    action: String
+) -> String {
+    let session = Session::new(
+        AppId::from_str(&app_id).unwrap(),
+        &action,
+        VerificationLevel::Device,
+        BridgeUrl::default(),
+        (),
+        None
+    ).await.unwrap();
+
+    let url = session.connect_url().to_string();
+    url
 }
 
 // TODO: Return a `Result<MyIpAddress, SomeErrorType>`

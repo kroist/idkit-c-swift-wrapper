@@ -8,8 +8,11 @@ group.enter()
 
 print("We're in Swift about to call our async Rust function.")
 Task {
-    let ipAddress = await get_my_ip_from_rust()
-    print("Now we're in Swift again. IP address: \(ipAddress.origin.toString())")
+    let ipAddress = await get_url(
+        "app_14d0217a5ec381effeb27d036b7c6c63",
+        "rust-test"
+    )
+    print("Now we're in Swift again. IP address: \(ipAddress.toString())")
 
     group.leave()
 }
